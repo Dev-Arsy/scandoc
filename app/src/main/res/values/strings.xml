@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ScanDoc</string>
+    <string name="scan">Scan</string>
+    <string name="empty">No scans yet.\nTap Scan to capture your first document.</string>
+
+    <plurals name="pages">
+        <item quantity="one">%d page</item>
+        <item quantity="other">%d pages</item>
+    </plurals>
+
+    <string name="open_pdf">Open PDF</string>
+    <string name="share_pdf">Share PDF</string>
+    <string name="save_pdf">Save PDF to…</string>
+    <string name="share_word">Share as Word (.docx)</string>
+    <string name="save_word">Save as Word (.docx)…</string>
+    <string name="delete">Delete</string>
+    <string name="cancel">Cancel</string>
+    <string name="delete_confirm">Delete this scan? This cannot be undone.</string>
+
+    <string name="saving">Saving…</string>
+    <string name="reading_text">Reading text from pages…</string>
+    <string name="saved">Saved</string>
+    <string name="error_generic">Something went wrong. Please try again.</string>
+    <string name="no_viewer">No PDF viewer found on this phone.</string>
+    <string name="scan_failed">Scanner not available: %1$s</string>
+</resources>
