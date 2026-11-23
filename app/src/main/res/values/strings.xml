@@ -2,13 +2,38 @@
 <resources>
     <string name="app_name">ScanDoc</string>
     <string name="scan">Scan</string>
-    <string name="empty">No scans yet.\nTap Scan to capture your first document.</string>
+    <string name="import_image">Import from gallery</string>
+    <string name="empty">No scans yet.\nTap Scan to photograph a document,\nor the image button to import one.</string>
 
     <plurals name="pages">
         <item quantity="one">%d page</item>
         <item quantity="other">%d pages</item>
     </plurals>
+    <plurals name="pages_added">
+        <item quantity="one">%d page added</item>
+        <item quantity="other">%d pages added</item>
+    </plurals>
 
+    <!-- scan session menu -->
+    <string name="scan_next">Scan another page</string>
+    <string name="import_next">Import another page</string>
+    <string name="finish_pdf">Finish and create PDF</string>
+    <string name="discard">Discard</string>
+    <string name="discard_confirm">Discard this scan and all its pages?</string>
+
+    <!-- crop screen -->
+    <string name="crop_hint">Drag the corners to fit the page</string>
+    <string name="review_hint">Pick a look for this page</string>
+    <string name="rotate">Rotate</string>
+    <string name="auto">Auto</string>
+    <string name="next">Next</string>
+    <string name="back">Back</string>
+    <string name="save_page">Save page</string>
+    <string name="f_original">Original</string>
+    <string name="f_magic">Magic</string>
+    <string name="f_bw">B&amp;W</string>
+
+    <!-- actions -->
     <string name="open_pdf">Open PDF</string>
     <string name="share_pdf">Share PDF</string>
     <string name="save_pdf">Save PDF to…</string>
@@ -18,10 +43,14 @@
     <string name="cancel">Cancel</string>
     <string name="delete_confirm">Delete this scan? This cannot be undone.</string>
 
-    <string name="saving">Saving…</string>
+    <!-- messages -->
+    <string name="loading">Loading…</string>
+    <string name="saving">Creating PDF…</string>
     <string name="reading_text">Reading text from pages…</string>
     <string name="saved">Saved</string>
     <string name="error_generic">Something went wrong. Please try again.</string>
     <string name="no_viewer">No PDF viewer found on this phone.</string>
-    <string name="scan_failed">Scanner not available: %1$s</string>
+    <string name="no_camera">No camera app found.</string>
+    <string name="no_picker">No gallery or file picker found.</string>
+    <string name="no_image">Could not open this picture.</string>
 </resources>

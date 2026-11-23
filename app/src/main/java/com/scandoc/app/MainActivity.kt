@@ -17,16 +17,11 @@ import android.widget.ListView
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
-import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
-import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions
-import com.google.mlkit.vision.documentscanner.GmsDocumentScanning
-import com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult
 import java.io.File
 import kotlin.concurrent.thread
 
@@ -40,14 +35,30 @@ class MainActivity : AppCompatActivity() {
     /** File waiting to be copied to the location the user picks in the system "save" dialog. */
     private var pendingSave: File? = null
 
+    /** Folder collecting the pages of the scan in progress (null when no scan is running). */
+    private var sessionDir: File? = null
+
+    /** Temporary photo (camera shot or gallery import) currently being cropped. */
+    private var captureFile: File? = null
+
     private val thumbCache = object : LruCache<String, Bitmap>(40) {}
 
-    private val scanLauncher =
-        registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { res ->
-            if (res.resultCode == RESULT_OK) {
-                val result = GmsDocumentScanningResult.fromActivityResultIntent(res.data)
-                if (result != null) onScanned(result)
-            }
+    private val takePicture =
+        registerForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+            val f = captureFile
+            if (ok && f != null && f.length() > 0) openCrop(f) else afterCancelledStep()
+        }
+
+    private val pickImage =
+        registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            if (uri != null) importUri(uri) else afterCancelledStep()
+        }
+
+    private val cropLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
+            captureFile?.delete()
+            captureFile = null
+            if (res.resultCode == RESULT_OK) showSessionMenu() else afterCancelledStep()
         }
 
     private val savePdfLauncher =
@@ -65,60 +76,136 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         pendingSave = savedInstanceState?.getString(KEY_PENDING)?.let { File(it) }
+        sessionDir = savedInstanceState?.getString(KEY_SESSION)?.let { File(it) }
+        captureFile = savedInstanceState?.getString(KEY_CAPTURE)?.let { File(it) }
 
         listView = findViewById(R.id.list)
         emptyView = findViewById(R.id.empty)
         listView.adapter = adapter
         listView.setOnItemClickListener { _, _, position, _ -> showActions(docs[position]) }
-        findViewById<ExtendedFloatingActionButton>(R.id.fab).setOnClickListener { startScan() }
+        findViewById<View>(R.id.fab).setOnClickListener { startCamera() }
+        findViewById<View>(R.id.fabGallery).setOnClickListener { startImport() }
 
+        ScanStore.cleanup(this, sessionDir)
         refresh()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putString(KEY_PENDING, pendingSave?.absolutePath)
+        outState.putString(KEY_SESSION, sessionDir?.absolutePath)
+        outState.putString(KEY_CAPTURE, captureFile?.absolutePath)
     }
 
     // ---------------------------------------------------------------- scanning
 
-    private fun startScan() {
-        val options = GmsDocumentScannerOptions.Builder()
-            .setGalleryImportAllowed(true)
-            .setPageLimit(30)
-            .setResultFormats(
-                GmsDocumentScannerOptions.RESULT_FORMAT_JPEG,
-                GmsDocumentScannerOptions.RESULT_FORMAT_PDF
-            )
-            .setScannerMode(GmsDocumentScannerOptions.SCANNER_MODE_FULL)
-            .build()
+    private fun captureDir(): File = File(cacheDir, "capture").apply { mkdirs() }
 
-        GmsDocumentScanning.getClient(options)
-            .getStartScanIntent(this)
-            .addOnSuccessListener { sender ->
-                scanLauncher.launch(IntentSenderRequest.Builder(sender).build())
-            }
-            .addOnFailureListener { e ->
-                toast(getString(R.string.scan_failed, e.message ?: ""))
-            }
+    private fun startCamera() {
+        val f = File(captureDir(), "cap_${System.currentTimeMillis()}.jpg")
+        captureFile = f
+        try {
+            takePicture.launch(uriFor(f))
+        } catch (e: ActivityNotFoundException) {
+            toast(getString(R.string.no_camera))
+        }
     }
 
-    private fun onScanned(result: GmsDocumentScanningResult) {
-        val pdfUri: Uri? = result.pdf?.uri
-        val pageUris: List<Uri> = result.pages?.map { it.imageUri } ?: emptyList()
-        if (pdfUri == null) {
-            toast(getString(R.string.error_generic))
-            return
+    private fun startImport() {
+        try {
+            pickImage.launch("image/*")
+        } catch (e: ActivityNotFoundException) {
+            toast(getString(R.string.no_picker))
         }
+    }
 
-        val dialog = busyDialog(getString(R.string.saving))
+    private fun importUri(uri: Uri) {
+        val dialog = busyDialog(getString(R.string.loading))
         thread {
-            val doc = runCatching { ScanStore.create(this, pdfUri, pageUris) }.getOrNull()
+            val f = File(captureDir(), "imp_${System.currentTimeMillis()}.jpg")
+            val ok = runCatching { ScanStore.copyUriToFile(this, uri, f) }.isSuccess
             runOnUiThread {
                 if (dialog.isShowing) dialog.dismiss()
                 if (isFinishing || isDestroyed) return@runOnUiThread
-                refresh()
-                if (doc != null) showActions(doc) else toast(getString(R.string.error_generic))
+                if (ok) {
+                    captureFile = f
+                    openCrop(f)
+                } else {
+                    toast(getString(R.string.error_generic))
+                    afterCancelledStep()
+                }
+            }
+        }
+    }
+
+    private fun openCrop(photo: File) {
+        val session = sessionDir ?: ScanStore.newSession(this).also { sessionDir = it }
+        val out = ScanStore.nextPageFile(session)
+        val intent = Intent(this, CropActivity::class.java)
+            .putExtra(CropActivity.EXTRA_IMAGE, photo.path)
+            .putExtra(CropActivity.EXTRA_OUT, out.path)
+        cropLauncher.launch(intent)
+    }
+
+    /** The user backed out of the camera, the picker or the crop screen. */
+    private fun afterCancelledStep() {
+        val dir = sessionDir ?: return
+        if (ScanStore.pageCount(dir) > 0) showSessionMenu() else discardSession()
+    }
+
+    private fun showSessionMenu() {
+        val dir = sessionDir ?: return
+        val n = ScanStore.pageCount(dir)
+        val items = arrayOf(
+            getString(R.string.scan_next),
+            getString(R.string.import_next),
+            getString(R.string.finish_pdf),
+            getString(R.string.discard)
+        )
+        MaterialAlertDialogBuilder(this)
+            .setTitle(resources.getQuantityString(R.plurals.pages_added, n, n))
+            .setCancelable(false)
+            .setItems(items) { _, which ->
+                when (which) {
+                    0 -> startCamera()
+                    1 -> startImport()
+                    2 -> finishSession()
+                    3 -> confirmDiscard()
+                }
+            }
+            .show()
+    }
+
+    private fun confirmDiscard() {
+        MaterialAlertDialogBuilder(this)
+            .setMessage(R.string.discard_confirm)
+            .setCancelable(false)
+            .setNegativeButton(R.string.cancel) { _, _ -> showSessionMenu() }
+            .setPositiveButton(R.string.discard) { _, _ -> discardSession() }
+            .show()
+    }
+
+    private fun discardSession() {
+        sessionDir?.deleteRecursively()
+        sessionDir = null
+    }
+
+    private fun finishSession() {
+        val dir = sessionDir ?: return
+        val dialog = busyDialog(getString(R.string.saving))
+        thread {
+            val doc = runCatching { ScanStore.finishSession(dir) }.getOrNull()
+            runOnUiThread {
+                if (dialog.isShowing) dialog.dismiss()
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                if (doc != null) {
+                    sessionDir = null
+                    refresh()
+                    showActions(doc)
+                } else {
+                    toast(getString(R.string.error_generic))
+                    showSessionMenu()
+                }
             }
         }
     }
@@ -247,7 +334,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun thumbFor(doc: ScanDoc): Bitmap? {
-        thumbCache.get(doc.id)?.let { return it }
+        val cached = thumbCache.get(doc.id)
+        if (cached != null) return cached
         val bmp = BitmapFactory.decodeFile(doc.thumb.path) ?: return null
         thumbCache.put(doc.id, bmp)
         return bmp
@@ -271,6 +359,8 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val KEY_PENDING = "pending_save"
+        private const val KEY_SESSION = "session_dir"
+        private const val KEY_CAPTURE = "capture_file"
         private const val DOCX_MIME =
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     }

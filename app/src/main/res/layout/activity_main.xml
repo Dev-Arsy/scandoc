@@ -30,7 +30,7 @@
             android:layout_weight="1"
             android:clipToPadding="false"
             android:divider="@null"
-            android:paddingBottom="96dp" />
+            android:paddingBottom="160dp" />
     </LinearLayout>
 
     <TextView
@@ -44,6 +44,17 @@
         android:textColor="?attr/colorOnSurfaceVariant"
         android:textSize="16sp"
         android:visibility="gone" />
+
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fabGallery"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="28dp"
+        android:layout_marginBottom="96dp"
+        android:contentDescription="@string/import_image"
+        app:fabSize="mini"
+        app:srcCompat="@drawable/ic_image" />
 
     <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
         android:id="@+id/fab"
